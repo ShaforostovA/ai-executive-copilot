@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+# env + credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+*secret*.json
+*.session
+*.session-journal
+# JS
+node_modules/
+frontend/dist/
+frontend/.vite/
+# IDE and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
+# data and logs
+logs/
+*.log
+*.sqlite3
+*.db
+qdrant_storage/
+postgres_data/
+redis_data/
+**/uploads/
+**/recordings/
+# office temp files
+~$*.docx

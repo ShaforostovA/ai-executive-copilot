@@ -1,0 +1,34 @@
+stages:
+  - validate
+  - test
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+.backend_job:
+  image: python:3.13-slim
+  before_script:
+    - python -m pip install --disable-pip-version-check -e './backend[dev]'
+
+backend:lint:
+  extends: .backend_job
+  stage: validate
+  script:
+    - python -m compileall -q backend/src backend/tests
+    - ruff check backend
+
+backend:test:
+  extends: .backend_job
+  stage: test
+  script:
+    - pytest -q backend/tests
+
+# Добавить frontend:lint и frontend:build после появления
+# frontend/package-lock.json и рабочего Vite/React приложения.
+# Deploy job, secrets и registry — отдельная задача после подготовки VPS.
