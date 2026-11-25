@@ -30,7 +30,36 @@ backend:test:
   extends: .backend_job
   stage: test
   script:
-    - pytest -q backend/tests
+    - pytest -q backend/tests --ignore=backend/tests/integration
+
+backend:test:postgresql:
+  stage: test
+  image: python:3.13-slim
+  services:
+    - name: postgres:17-alpine
+  variables:
+    POSTGRES_USER: copilot_test
+    POSTGRES_DB: copilot_test
+    POSTGRES_PASSWORD: ci_postgres_only
+    COPILOT_TEST_DATABASE_URL: postgresql+asyncpg://copilot_test:ci_postgres_only@postgres:5432/copilot_test
+  before_script:
+    - python -m pip install --disable-pip-version-check -e './backend[dev]'
+    - |
+      python - <<'PY'
+      import socket
+      import time
+
+      for _ in range(60):
+          try:
+              with socket.create_connection(("postgres", 5432), timeout=1):
+                  break
+          except OSError:
+              time.sleep(1)
+      else:
+          raise SystemExit("Disposable PostgreSQL service did not become ready.")
+      PY
+  script:
+    - pytest -q backend/tests/integration/test_postgresql_auth.py
 
 # Добавить frontend:lint и frontend:build после появления
 # frontend/package-lock.json и рабочего Vite/React приложения.
