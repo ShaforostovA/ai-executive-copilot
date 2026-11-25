@@ -59,7 +59,7 @@ export COPILOT_TEST_DATABASE_URL='postgresql+asyncpg://<test-user>:<test-passwor
 pytest -q backend/tests
 ```
 
-Без переменной PostgreSQL integration-тесты явно пропускаются, а не заменяются SQLite. Текущий GitLab CI остается без изменений; полный PostgreSQL suite проверяется локально в Docker до MR.
+Без переменной PostgreSQL integration-тесты явно пропускаются, а не заменяются SQLite. GitLab CI содержит отдельный `backend:test:postgresql` job с одноразовым PostgreSQL 17 service; полный PostgreSQL suite также проверяется локально в Docker до MR.
 
 ## Synthetic development login
 

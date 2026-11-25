@@ -25,6 +25,9 @@ dist/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/dev-dist/
+frontend/playwright-report/
+frontend/test-results/
 # IDE and OS
 .idea/
 .vscode/*

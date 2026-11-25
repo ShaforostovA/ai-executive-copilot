@@ -23,10 +23,15 @@ from copilot_api.infrastructure.database.models import (
     User,
 )
 from copilot_api.infrastructure.database.repository import PostgresDashboardRepository
+from copilot_api.infrastructure.gigachat.errors import GigaChatResponseError
 from copilot_api.main import create_app
+from copilot_api.schemas.auth import Principal
 from copilot_api.schemas.common import DataOrigin, IntegrationState
-from copilot_api.schemas.dashboard import SourceDetail
+from copilot_api.schemas.dashboard import AttentionItem, SourceDetail
+from copilot_api.schemas.workflow import SyntheticAnalysisRequest
 from copilot_api.services.auth import AuthService
+from copilot_api.services.dependencies import get_analysis_provider
+from copilot_api.services.workflow import AnalysisWorkflowService
 
 _PASSWORD = "integration-test-password"
 _BACKEND_DIRECTORY = Path(__file__).parents[2]
@@ -355,3 +360,144 @@ async def test_readiness_checks_real_database(database_url: str) -> None:
         response = client.get("/readyz")
         assert response.status_code == 503
         assert response.json()["checks"]["database"] == "error"
+
+
+class MockAnalysisProvider:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls = 0
+
+    async def analyze(self, source: SourceDetail) -> AttentionItem:
+        self.calls += 1
+        if self.fail:
+            raise GigaChatResponseError("Synthetic provider failure")
+        return AttentionItem(
+            item_id=uuid4(),
+            tenant_id=source.tenant_id,
+            owner_id=source.owner_id,
+            source_id=source.source_id,
+            score=88,
+            summary="Mock LIVE analysis",
+            importance_reason="Synthetic workflow deadline",
+            next_step="Review the synthetic workflow action",
+            source_timestamp=source.source_timestamp,
+            data_origin=DataOrigin.LIVE,
+        )
+
+
+def workflow_payload() -> SyntheticAnalysisRequest:
+    return SyntheticAnalysisRequest(
+        source_id=uuid4(),
+        external_id="workflow-event-001",
+        source_type="synthetic",
+        title="Synthetic workflow message",
+        content="Synthetic message for mock AnalysisProvider workflow",
+        source_timestamp=datetime(2026, 11, 25, 12, 0, tzinfo=UTC),
+    )
+
+
+@pytest.mark.asyncio
+async def test_ai_workflow_is_idempotent_and_updates_dashboard(
+    db_session: AsyncSession,
+) -> None:
+    organization, owner = await create_user(
+        db_session,
+        "workflow",
+        "workflow@example.test",
+    )
+    principal = Principal(
+        user_id=owner.id,
+        organization_id=organization.id,
+        organization_slug=organization.slug,
+        email=owner.email,
+    )
+    repository = PostgresDashboardRepository(db_session)
+    provider = MockAnalysisProvider()
+    service = AnalysisWorkflowService(repository, provider, "mock-gigachat")
+    payload = workflow_payload()
+    first = await service.run(payload, principal)
+    second = await service.run(payload, principal)
+    assert first.analysis.data_origin is DataOrigin.LIVE
+    assert first.idempotent_replay is False
+    assert second.idempotent_replay is True
+    assert second.analysis.item_id == first.analysis.item_id
+    assert provider.calls == 1
+    count = (
+        await db_session.execute(select(func.count()).select_from(AnalysisResult))
+    ).scalar_one()
+    assert count == 1
+    dashboard = await repository.get_current_digest(organization.id, owner.id)
+    assert dashboard.attention_items[0].data_origin is DataOrigin.LIVE
+
+
+@pytest.mark.asyncio
+async def test_ai_workflow_provider_error_does_not_create_demo_result(
+    db_session: AsyncSession,
+) -> None:
+    organization, owner = await create_user(
+        db_session,
+        "workflow-error",
+        "workflow-error@example.test",
+    )
+    principal = Principal(
+        user_id=owner.id,
+        organization_id=organization.id,
+        organization_slug=organization.slug,
+        email=owner.email,
+    )
+    repository = PostgresDashboardRepository(db_session)
+    service = AnalysisWorkflowService(
+        repository,
+        MockAnalysisProvider(fail=True),
+        "mock-gigachat",
+    )
+    with pytest.raises(GigaChatResponseError):
+        await service.run(workflow_payload(), principal)
+    count = (
+        await db_session.execute(select(func.count()).select_from(AnalysisResult))
+    ).scalar_one()
+    assert count == 0
+    dashboard = await repository.get_current_digest(organization.id, owner.id)
+    assert dashboard.attention_items == []
+
+
+@pytest.mark.asyncio
+async def test_http_ai_workflow_requires_session_and_uses_mock_provider(
+    db_session: AsyncSession,
+    database_url: str,
+) -> None:
+    organization, owner = await create_user(
+        db_session,
+        "workflow-http",
+        "workflow-http@example.test",
+    )
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url=database_url,
+        use_demo_repository=False,
+        session_cookie_secure=False,
+    )
+    application = create_app(settings)
+    provider = MockAnalysisProvider()
+    application.dependency_overrides[get_analysis_provider] = lambda: provider
+    with TestClient(application) as client:
+        payload = workflow_payload().model_dump(mode="json")
+        assert client.post("/api/v1/analysis/run", json=payload).status_code == 401
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "organization_slug": organization.slug,
+                "email": owner.email,
+                "password": _PASSWORD,
+            },
+        )
+        assert login.status_code == 200
+        first = client.post("/api/v1/analysis/run", json=payload)
+        assert first.status_code == 200
+        assert first.json()["analysis"]["data_origin"] == "LIVE"
+        second = client.post("/api/v1/analysis/run", json=payload)
+        assert second.status_code == 200
+        assert second.json()["idempotent_replay"] is True
+        assert second.json()["analysis"]["item_id"] == first.json()["analysis"]["item_id"]
+        assert provider.calls == 1

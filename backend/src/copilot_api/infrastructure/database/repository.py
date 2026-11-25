@@ -151,6 +151,79 @@ class PostgresDashboardRepository:
             raise RuntimeError("Inserted source message could not be loaded.")
         return self._to_source_detail(stored)
 
+    async def get_analysis_result(
+        self,
+        source_id: UUID,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> AttentionItem | None:
+        query = (
+            select(AnalysisResult, SourceMessage)
+            .join(SourceMessage, AnalysisResult.source_message_id == SourceMessage.id)
+            .where(
+                AnalysisResult.source_message_id == source_id,
+                AnalysisResult.organization_id == organization_id,
+                AnalysisResult.owner_id == owner_id,
+                SourceMessage.organization_id == organization_id,
+                SourceMessage.owner_id == owner_id,
+            )
+        )
+        row = (await self.session.execute(query)).one_or_none()
+        if row is None:
+            return None
+        analysis, source = row
+        return self._to_attention_item(analysis, source)
+
+    async def record_analysis_result(
+        self,
+        analysis: AttentionItem,
+        model_name: str,
+    ) -> AttentionItem:
+        statement = (
+            insert(AnalysisResult)
+            .values(
+                id=analysis.item_id,
+                organization_id=analysis.tenant_id,
+                owner_id=analysis.owner_id,
+                source_message_id=analysis.source_id,
+                score=analysis.score,
+                summary=analysis.summary,
+                importance_reason=analysis.importance_reason,
+                next_step=analysis.next_step,
+                model=model_name,
+                data_origin=analysis.data_origin.value,
+            )
+            .on_conflict_do_nothing(constraint="uq_analysis_results_source_message_id")
+        )
+        await self.session.execute(statement)
+        await self.session.commit()
+        stored = await self.get_analysis_result(
+            analysis.source_id,
+            analysis.tenant_id,
+            analysis.owner_id,
+        )
+        if stored is None:
+            raise RuntimeError("Stored analysis result could not be loaded.")
+        return stored
+
+    @staticmethod
+    def _to_attention_item(
+        analysis: AnalysisResult,
+        source: SourceMessage,
+    ) -> AttentionItem:
+        return AttentionItem(
+            item_id=analysis.id,
+            tenant_id=analysis.organization_id,
+            owner_id=analysis.owner_id,
+            source_id=source.id,
+            score=analysis.score,
+            summary=analysis.summary,
+            importance_reason=analysis.importance_reason,
+            next_step=analysis.next_step,
+            source_timestamp=source.source_timestamp,
+            data_origin=DataOrigin(analysis.data_origin),
+        )
+
     @staticmethod
     def _to_source_detail(source: SourceMessage) -> SourceDetail:
         return SourceDetail(

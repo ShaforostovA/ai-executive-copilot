@@ -61,6 +61,33 @@ backend:test:postgresql:
   script:
     - pytest -q backend/tests/integration/test_postgresql_auth.py
 
-# Добавить frontend:lint и frontend:build после появления
-# frontend/package-lock.json и рабочего Vite/React приложения.
+.frontend_job:
+  image: node:22-alpine
+  before_script:
+    - npm ci --prefix frontend
+
+frontend:lint:
+  extends: .frontend_job
+  stage: validate
+  script:
+    - npm run lint --prefix frontend
+
+frontend:typecheck:
+  extends: .frontend_job
+  stage: validate
+  script:
+    - npm run typecheck --prefix frontend
+
+frontend:test:
+  extends: .frontend_job
+  stage: test
+  script:
+    - npm test --prefix frontend
+
+frontend:build:
+  extends: .frontend_job
+  stage: test
+  script:
+    - npm run build --prefix frontend
+
 # Deploy job, secrets и registry — отдельная задача после подготовки VPS.
