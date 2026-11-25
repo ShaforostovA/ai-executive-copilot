@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
+    database_url: SecretStr = (
+        "postgresql+asyncpg://copilot:replace_with_random_local_password@127.0.0.1:5432/copilot"
+    )
+    database_connect_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    use_demo_repository: bool = False
+    session_cookie_name: str = "copilot_session"
+    session_cookie_secure: bool = True
+    session_ttl_minutes: int = Field(default=480, ge=5, le=10080)
+    demo_seed_password: SecretStr | None = None
 
     gigachat_credentials: SecretStr | None = None
     gigachat_scope: Literal[
@@ -38,6 +47,14 @@ class Settings(BaseSettings):
         if value.scheme != "https":
             raise ValueError("GigaChat endpoints must use HTTPS.")
         return value
+
+    @model_validator(mode="after")
+    def validate_runtime_mode(self) -> "Settings":
+        if self.environment == "production" and self.use_demo_repository:
+            raise ValueError("DEMO repository cannot be enabled in production.")
+        if self.environment == "production" and not self.session_cookie_secure:
+            raise ValueError("Secure session cookies are required in production.")
+        return self
 
 
 @lru_cache

@@ -15,11 +15,24 @@ class AnalysisProvider(Protocol):
 
 
 class DashboardRepository(Protocol):
-    async def get_current_digest(self) -> Digest:
+    async def get_current_digest(
+        self,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> Digest:
         pass
 
-    async def list_integrations(self) -> list[IntegrationStatus]:
+    async def list_integrations(
+        self,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> list[IntegrationStatus]:
         pass
 
-    async def get_source_by_id(self, source_id: UUID) -> SourceDetail | None:
+    async def get_source_by_id(
+        self,
+        source_id: UUID,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> SourceDetail | None:
         pass
