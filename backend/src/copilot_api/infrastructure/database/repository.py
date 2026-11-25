@@ -1,11 +1,12 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid5
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from copilot_api.infrastructure.database.models import (
+    AIRequest,
     AnalysisResult,
     Connection,
     SourceMessage,
@@ -206,6 +207,52 @@ class PostgresDashboardRepository:
             raise RuntimeError("Stored analysis result could not be loaded.")
         return stored
 
+    async def consume_ai_request(
+        self,
+        organization_id: UUID,
+        owner_id: UUID,
+        per_minute_limit: int,
+        daily_limit: int,
+    ) -> None:
+        lock_key = f"{organization_id}:{owner_id}"
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": lock_key},
+        )
+        now = datetime.now(UTC)
+        filters = (
+            AIRequest.organization_id == organization_id,
+            AIRequest.owner_id == owner_id,
+        )
+        minute_count = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(AIRequest)
+                .where(*filters, AIRequest.created_at >= now - timedelta(seconds=60))
+            )
+        ).scalar_one()
+        daily_count = (
+            await self.session.execute(
+                select(func.count())
+                .select_from(AIRequest)
+                .where(
+                    *filters,
+                    AIRequest.created_at >= now.replace(hour=0, minute=0, second=0, microsecond=0),
+                )
+            )
+        ).scalar_one()
+        if minute_count >= per_minute_limit or daily_count >= daily_limit:
+            await self.session.rollback()
+            raise AIRequestLimitError("AI request budget exceeded.")
+        self.session.add(
+            AIRequest(
+                organization_id=organization_id,
+                owner_id=owner_id,
+                created_at=now,
+            )
+        )
+        await self.session.commit()
+
     @staticmethod
     def _to_attention_item(
         analysis: AnalysisResult,
@@ -238,3 +285,7 @@ class PostgresDashboardRepository:
             source_url=source.source_url,
             data_origin=DataOrigin(source.data_origin),
         )
+
+
+class AIRequestLimitError(Exception):
+    pass

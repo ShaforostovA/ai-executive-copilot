@@ -59,5 +59,7 @@ def get_dashboard_service(
 
 
 async def get_analysis_provider(request: Request) -> AsyncIterator[AnalysisProvider]:
+    if not request.app.state.settings.gigachat_enabled:
+        raise HTTPException(status_code=503, detail="LIVE AI is disabled.")
     async with GigaChatProvider(request.app.state.settings) as provider:
         yield provider

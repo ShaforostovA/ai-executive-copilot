@@ -3,7 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from copilot_api.infrastructure.database.repository import PostgresDashboardRepository
+from copilot_api.infrastructure.database.repository import (
+    AIRequestLimitError,
+    PostgresDashboardRepository,
+)
 from copilot_api.infrastructure.gigachat.errors import (
     GigaChatError,
     GigaChatRateLimitError,
@@ -34,17 +37,20 @@ async def run_analysis(
 ) -> AnalysisWorkflowResponse:
     if request.app.state.settings.use_demo_repository:
         raise HTTPException(status_code=503, detail="Analysis workflow requires PostgreSQL.")
+    settings = request.app.state.settings
     service = AnalysisWorkflowService(
         PostgresDashboardRepository(session),
         provider,
-        request.app.state.settings.gigachat_model,
+        settings.gigachat_model,
+        settings.gigachat_requests_per_minute,
+        settings.gigachat_daily_request_limit,
     )
     try:
         return await service.run(payload, principal)
-    except GigaChatRateLimitError:
+    except (GigaChatRateLimitError, AIRequestLimitError):
         raise HTTPException(
             status_code=429,
-            detail="Analysis provider rate limit exceeded.",
+            detail="Analysis request limit exceeded.",
         ) from None
     except (GigaChatError, AnalysisWorkflowError):
         raise HTTPException(

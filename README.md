@@ -47,6 +47,8 @@ docs/                       правила работы, решения, арх�
 
 ## Документация
 
+- [Public MVP safeguards и Яндекс Почта](docs/PHASE5_PUBLIC_MVP.md)
+- [Production deploy, backup и rollback](docs/PRODUCTION_RUNBOOK.md)
 - [Текущий vertical slice: React и AI workflow](docs/PHASE4_REACT_AI_WORKFLOW.md)
 - [PostgreSQL и серверная авторизация](docs/PHASE3_POSTGRES_AUTH.md)
 - [GigaChatProvider](docs/GIGACHAT_PROVIDER.md)

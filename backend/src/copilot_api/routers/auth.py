@@ -21,6 +21,9 @@ async def login(
     request: Request,
     service: AuthServiceDependency,
 ) -> Principal:
+    client_host = request.client.host if request.client is not None else "unknown"
+    if not request.app.state.login_rate_limiter.allow(client_host):
+        raise HTTPException(status_code=429, detail="Too many login attempts.")
     authenticated = await service.login(
         payload.organization_slug,
         payload.email,

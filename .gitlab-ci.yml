@@ -17,7 +17,7 @@ workflow:
 .backend_job:
   image: python:3.13-slim
   before_script:
-    - python -m pip install --disable-pip-version-check -e './backend[dev]'
+    - python -m pip install --disable-pip-version-check -e './backend[dev]' -c backend/requirements.lock
 
 backend:lint:
   extends: .backend_job
@@ -43,7 +43,7 @@ backend:test:postgresql:
     POSTGRES_PASSWORD: ci_postgres_only
     COPILOT_TEST_DATABASE_URL: postgresql+asyncpg://copilot_test:ci_postgres_only@postgres:5432/copilot_test
   before_script:
-    - python -m pip install --disable-pip-version-check -e './backend[dev]'
+    - python -m pip install --disable-pip-version-check -e './backend[dev]' -c backend/requirements.lock
     - |
       python - <<'PY'
       import socket
@@ -91,3 +91,54 @@ frontend:build:
     - npm run build --prefix frontend
 
 # Deploy job, secrets и registry — отдельная задача после подготовки VPS.
+
+frontend:e2e:
+  stage: test
+  image: python:3.13-slim
+  services:
+    - name: postgres:17-alpine
+  variables:
+    NODE_VERSION: 22.16.0
+    POSTGRES_USER: copilot_test
+    POSTGRES_DB: copilot_test
+    POSTGRES_PASSWORD: ci_postgres_only
+    COPILOT_DATABASE_URL: postgresql+asyncpg://copilot_test:ci_postgres_only@postgres:5432/copilot_test
+    COPILOT_ENVIRONMENT: development
+    COPILOT_USE_DEMO_REPOSITORY: "false"
+    COPILOT_SESSION_COOKIE_SECURE: "false"
+    COPILOT_DEMO_SEED_PASSWORD: ci_frontend_only
+    COPILOT_ALLOWED_ORIGINS: http://127.0.0.1:5173
+    COPILOT_GIGACHAT_ENABLED: "false"
+  before_script:
+    - python -m pip install --disable-pip-version-check -e './backend[dev]' -c backend/requirements.lock
+    - apt-get update && apt-get install -y --no-install-recommends curl xz-utils
+    - curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o /tmp/node.tar.xz
+    - mkdir -p /opt/node && tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
+    - ln -sf /opt/node/bin/node /usr/local/bin/node && ln -sf /opt/node/bin/npm /usr/local/bin/npm && ln -sf /opt/node/bin/npx /usr/local/bin/npx
+    - npm ci --prefix frontend
+    - frontend/node_modules/.bin/playwright install --with-deps chromium
+    - |
+      python - <<'PY'
+      import socket
+      import time
+
+      for _ in range(60):
+          try:
+              with socket.create_connection(("postgres", 5432), timeout=1):
+                  break
+          except OSError:
+              time.sleep(1)
+      else:
+          raise SystemExit("Disposable E2E PostgreSQL service did not become ready.")
+      PY
+  script:
+    - cd backend && alembic upgrade head && cd ..
+    - python backend/scripts/seed_demo_data.py
+    - uvicorn copilot_api.main:app --host 127.0.0.1 --port 8000 &
+    - sleep 3
+    - E2E_DEMO_PASSWORD=ci_frontend_only npm run test:e2e --prefix frontend
+  artifacts:
+    when: on_failure
+    paths:
+      - frontend/test-results/
+    expire_in: 1 day
