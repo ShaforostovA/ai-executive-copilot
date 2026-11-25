@@ -61,13 +61,30 @@ _DEMO_DIGEST = Digest(
 
 
 class DemoDashboardRepository:
-    async def get_current_digest(self) -> Digest:
-        return _DEMO_DIGEST
+    async def get_current_digest(
+        self,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> Digest:
+        if organization_id == _TENANT_ID and owner_id == _OWNER_ID:
+            return _DEMO_DIGEST
+        return _DEMO_DIGEST.model_copy(update={"attention_items": [], "integrations": []})
 
-    async def list_integrations(self) -> list[IntegrationStatus]:
-        return [_DEMO_INTEGRATION]
+    async def list_integrations(
+        self,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> list[IntegrationStatus]:
+        if organization_id == _TENANT_ID and owner_id == _OWNER_ID:
+            return [_DEMO_INTEGRATION]
+        return []
 
-    async def get_source_by_id(self, source_id: UUID) -> SourceDetail | None:
-        if source_id == _SOURCE_ID:
+    async def get_source_by_id(
+        self,
+        source_id: UUID,
+        organization_id: UUID,
+        owner_id: UUID,
+    ) -> SourceDetail | None:
+        if source_id == _SOURCE_ID and organization_id == _TENANT_ID and owner_id == _OWNER_ID:
             return _DEMO_SOURCE
         return None

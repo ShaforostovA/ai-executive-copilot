@@ -6,6 +6,16 @@ services:
       dockerfile: backend/Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
+    environment:
+      COPILOT_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      COPILOT_USE_DEMO_REPOSITORY: "false"
+      COPILOT_SESSION_COOKIE_SECURE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >-
+      sh -c "cd /app/backend && alembic upgrade head &&
+      cd /app && exec uvicorn copilot_api.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
 
   postgres:
