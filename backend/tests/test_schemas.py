@@ -16,6 +16,7 @@ def attention_item_payload() -> dict[str, object]:
         "source_id": UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
         "score": 50,
         "summary": "Synthetic summary",
+        "importance_reason": "Synthetic importance reason",
         "next_step": "Synthetic next step",
         "source_timestamp": datetime(2026, 11, 25, 12, 0, tzinfo=UTC),
         "data_origin": DataOrigin.DEMO,

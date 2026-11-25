@@ -16,6 +16,7 @@ class AttentionItem(DashboardModel):
     source_id: UUID
     score: int = Field(ge=0, le=100)
     summary: str = Field(min_length=1)
+    importance_reason: str = Field(min_length=1)
     next_step: str = Field(min_length=1)
     source_timestamp: AwareDatetime
     data_origin: DataOrigin

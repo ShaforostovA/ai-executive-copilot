@@ -21,3 +21,11 @@ def test_environment_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.app_version == "1.2.3"
     assert settings.environment == "test"
     assert settings.api_v1_prefix == "/custom/v1"
+
+
+def test_gigachat_endpoints_require_https() -> None:
+    with pytest.raises(ValueError, match="must use HTTPS"):
+        Settings(
+            _env_file=None,
+            gigachat_chat_url="http://api.giga.chat/v1/chat/completions",
+        )
