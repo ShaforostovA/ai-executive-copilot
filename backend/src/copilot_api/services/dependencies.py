@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from copilot_api.core.config import Settings
 from copilot_api.infrastructure.database.repository import PostgresDashboardRepository
 from copilot_api.infrastructure.demo_repository import DemoDashboardRepository
+from copilot_api.infrastructure.gigachat.provider import GigaChatProvider
 from copilot_api.schemas.auth import Principal
 from copilot_api.services.auth import AuthService
 from copilot_api.services.dashboard import DashboardService
+from copilot_api.services.interfaces import AnalysisProvider
 
 
 def get_app_settings(request: Request) -> Settings:
@@ -54,3 +56,8 @@ def get_dashboard_service(
     else:
         repository = PostgresDashboardRepository(session)
     return DashboardService(repository)
+
+
+async def get_analysis_provider(request: Request) -> AsyncIterator[AnalysisProvider]:
+    async with GigaChatProvider(request.app.state.settings) as provider:
+        yield provider
