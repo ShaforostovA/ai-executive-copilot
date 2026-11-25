@@ -45,6 +45,7 @@ _DEMO_ATTENTION_ITEM = AttentionItem(
     source_id=_SOURCE_ID,
     score=82,
     summary="DEMO: Review the synthetic budget approval request.",
+    importance_reason="DEMO: The synthetic message contains a budget deadline.",
     next_step="Open the DEMO source and review the proposed next action.",
     source_timestamp=_SOURCE_TIMESTAMP,
     data_origin=DataOrigin.DEMO,
