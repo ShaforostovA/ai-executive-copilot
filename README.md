@@ -47,6 +47,7 @@ docs/                       правила работы, решения, арх�
 
 ## Документация
 
+- [Offline staging deployment и перенос Docker images](docs/OFFLINE_DEPLOYMENT.md)
 - [Staging deployment и VPS diagnostics](docs/STAGING_DEPLOYMENT.md)
 - [Фактический анализ VPS и memory profile](docs/VPS_ANALYSIS.md)
 - [Release readiness и Ubuntu rollout](docs/RELEASE_READINESS.md)

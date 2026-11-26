@@ -2,7 +2,7 @@
 
 ## Статус
 
-- RC1 объединен в `main` и отмечен тегом `v0.1.0-rc1`.
+- RC1 объединен в `main` и отмечен тегом `v0.1.0-rc2`.
 - SSH, DNS, firewall и production VPS не изменялись.
 - Live GigaChat и реальная Яндекс Почта не вызывались.
 - Этот документ описывает будущий запуск только после разрешения владельца и получения безопасных diagnostic results.
@@ -63,12 +63,12 @@ sudo chmod 755 /opt/copilot-staging
 sudo chmod 700 /etc/copilot-staging /var/backups/copilot-staging
 ```
 
-В `/opt/copilot-staging` разместить только `v0.1.0-rc1`:
+В `/opt/copilot-staging` разместить только `v0.1.0-rc2`:
 
 ```bash
 git clone https://gitlab.com/ai-executive-copilot-team/ai-executive-copilot.git /opt/copilot-staging/app
 cd /opt/copilot-staging/app
-git checkout v0.1.0-rc1
+git checkout v0.1.0-rc2
 ```
 
 Если проект приватный, аутентификацию выполнить через разрешенный deploy credential с read-only scope; не сохранять PAT в Git или командной строке.
