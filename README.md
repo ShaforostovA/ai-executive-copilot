@@ -48,6 +48,7 @@ docs/                       правила работы, решения, арх�
 ## Документация
 
 - [Staging deployment и VPS diagnostics](docs/STAGING_DEPLOYMENT.md)
+- [Фактический анализ VPS и memory profile](docs/VPS_ANALYSIS.md)
 - [Release readiness и Ubuntu rollout](docs/RELEASE_READINESS.md)
 - [Live integration smoke после разрешения](docs/LIVE_INTEGRATION_SMOKE.md)
 - [Public MVP safeguards и Яндекс Почта](docs/PHASE5_PUBLIC_MVP.md)
