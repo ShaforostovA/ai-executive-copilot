@@ -89,6 +89,6 @@ Credentials задаются только в локальном `.env` или м
 1. Установить backend: `pip install -e './backend[dev]'`.
 2. Самостоятельно задать действительные `COPILOT_GIGACHAT_CREDENTIALS`, подходящие scope/model в локальном `.env` с ограниченными правами.
 3. Подтвердить разрешение на live-запрос и условия провайдера.
-4. Запустить `python backend/scripts/gigachat_smoke.py`.
+4. Запустить `COPILOT_GIGACHAT_ENABLED=true python backend/scripts/gigachat_smoke.py --confirm-live`. Флаг подтверждает разрешение на один synthetic paid request.
 
 Не запускайте скрипт в CI и не добавляйте его output с реальными данными в Git. На текущем этапе live smoke **не выполнялся**.

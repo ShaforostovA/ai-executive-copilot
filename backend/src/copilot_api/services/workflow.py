@@ -19,10 +19,14 @@ class AnalysisWorkflowService:
         repository: PostgresDashboardRepository,
         provider: AnalysisProvider,
         model_name: str,
+        per_minute_limit: int = 3,
+        daily_limit: int = 20,
     ) -> None:
         self.repository = repository
         self.provider = provider
         self.model_name = model_name
+        self.per_minute_limit = per_minute_limit
+        self.daily_limit = daily_limit
 
     async def run(
         self,
@@ -35,6 +39,13 @@ class AnalysisWorkflowService:
             owner_id=principal.user_id,
             data_origin=DataOrigin.DEMO,
         )
+        return await self.run_source(source, principal)
+
+    async def run_source(
+        self,
+        source: SourceDetail,
+        principal: Principal,
+    ) -> AnalysisWorkflowResponse:
         stored_source = await self.repository.record_source_message(source)
         existing = await self.repository.get_analysis_result(
             stored_source.source_id,
@@ -47,6 +58,12 @@ class AnalysisWorkflowService:
                 analysis=existing,
                 idempotent_replay=True,
             )
+        await self.repository.consume_ai_request(
+            principal.organization_id,
+            principal.user_id,
+            self.per_minute_limit,
+            self.daily_limit,
+        )
         analysis = await self.provider.analyze(stored_source)
         if analysis.data_origin is not DataOrigin.LIVE:
             raise AnalysisWorkflowError("Analysis provider returned a non-live result.")

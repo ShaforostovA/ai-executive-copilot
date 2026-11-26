@@ -8,22 +8,30 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from copilot_api.core.config import Settings
 from copilot_api.core.security import hash_password, hash_session_token
+from copilot_api.infrastructure.credentials import CredentialCipher
 from copilot_api.infrastructure.database.models import (
     AnalysisResult,
     AuthSession,
     Connection,
+    IntegrationCredential,
     Organization,
     SourceMessage,
     User,
 )
-from copilot_api.infrastructure.database.repository import PostgresDashboardRepository
+from copilot_api.infrastructure.database.repository import (
+    AIRequestLimitError,
+    PostgresDashboardRepository,
+)
 from copilot_api.infrastructure.gigachat.errors import GigaChatResponseError
+from copilot_api.infrastructure.yandex_imap import MailboxBatch, MailboxMessage
 from copilot_api.main import create_app
 from copilot_api.schemas.auth import Principal
 from copilot_api.schemas.common import DataOrigin, IntegrationState
@@ -31,7 +39,9 @@ from copilot_api.schemas.dashboard import AttentionItem, SourceDetail
 from copilot_api.schemas.workflow import SyntheticAnalysisRequest
 from copilot_api.services.auth import AuthService
 from copilot_api.services.dependencies import get_analysis_provider
+from copilot_api.services.maintenance import cleanup_expired_sessions
 from copilot_api.services.workflow import AnalysisWorkflowService
+from copilot_api.services.yandex_mail import YandexIntegrationError, YandexMailService
 
 _PASSWORD = "integration-test-password"
 _BACKEND_DIRECTORY = Path(__file__).parents[2]
@@ -296,7 +306,7 @@ async def test_http_auth_cookie_and_dashboard(db_session: AsyncSession) -> None:
         use_demo_repository=False,
         session_cookie_secure=False,
     )
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers={"Origin": "http://testserver"}) as client:
         assert client.get("/api/v1/dashboard").status_code == 401
         wrong_login = client.post(
             "/api/v1/auth/login",
@@ -339,7 +349,7 @@ async def test_readiness_checks_real_database(database_url: str) -> None:
         use_demo_repository=False,
         session_cookie_secure=False,
     )
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers={"Origin": "http://testserver"}) as client:
         response = client.get("/readyz")
         assert response.status_code == 200
         assert response.json() == {
@@ -481,7 +491,7 @@ async def test_http_ai_workflow_requires_session_and_uses_mock_provider(
     application = create_app(settings)
     provider = MockAnalysisProvider()
     application.dependency_overrides[get_analysis_provider] = lambda: provider
-    with TestClient(application) as client:
+    with TestClient(application, headers={"Origin": "http://testserver"}) as client:
         payload = workflow_payload().model_dump(mode="json")
         assert client.post("/api/v1/analysis/run", json=payload).status_code == 401
         login = client.post(
@@ -501,3 +511,172 @@ async def test_http_ai_workflow_requires_session_and_uses_mock_provider(
         assert second.json()["idempotent_replay"] is True
         assert second.json()["analysis"]["item_id"] == first.json()["analysis"]["item_id"]
         assert provider.calls == 1
+
+
+class MockIMAPClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def fetch_new(
+        self,
+        username: str,
+        password: str,
+        folder: str,
+        uid_validity: str | None,
+        last_uid: int,
+        limit: int,
+    ) -> MailboxBatch:
+        self.calls += 1
+        if last_uid >= 2:
+            return MailboxBatch(uid_validity="42", messages=[])
+        return MailboxBatch(
+            uid_validity="42",
+            messages=[
+                MailboxMessage(
+                    uid=uid,
+                    uid_validity="42",
+                    external_id=f"42:{uid}",
+                    subject=f"Synthetic Yandex message {uid}",
+                    content="Synthetic mock IMAP content",
+                    timestamp=datetime(2026, 11, 26, 10, uid, tzinfo=UTC),
+                )
+                for uid in range(1, 3)
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_ai_daily_budget_is_persistent(
+    db_session: AsyncSession,
+) -> None:
+    organization, owner = await create_user(
+        db_session,
+        "ai-budget",
+        "ai-budget@example.test",
+    )
+    principal = Principal(
+        user_id=owner.id,
+        organization_id=organization.id,
+        organization_slug=organization.slug,
+        email=owner.email,
+    )
+    provider = MockAnalysisProvider()
+    service = AnalysisWorkflowService(
+        PostgresDashboardRepository(db_session),
+        provider,
+        "mock-gigachat",
+        per_minute_limit=10,
+        daily_limit=1,
+    )
+    await service.run(workflow_payload(), principal)
+    second_payload = workflow_payload().model_copy(
+        update={"source_id": uuid4(), "external_id": "workflow-event-002"}
+    )
+    with pytest.raises(AIRequestLimitError):
+        await service.run(second_payload, principal)
+    assert provider.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_expired_sessions_are_cleaned_automatically(
+    db_session: AsyncSession,
+) -> None:
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    _, owner = await create_user(db_session, "cleanup", "cleanup@example.test")
+    service = AuthService(db_session, session_ttl_minutes=30)
+    authenticated = await service.login("cleanup", owner.email, _PASSWORD)
+    assert authenticated is not None
+    stored = (
+        await db_session.execute(select(AuthSession).where(AuthSession.user_id == owner.id))
+    ).scalar_one()
+    stored.expires_at = datetime(2020, 1, 1, tzinfo=UTC)
+    await db_session.commit()
+    factory = async_sessionmaker(db_session.bind, expire_on_commit=False)
+    assert await cleanup_expired_sessions(factory) == 1
+    count = (await db_session.execute(select(func.count()).select_from(AuthSession))).scalar_one()
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_yandex_mock_imap_sync_ai_isolation_and_revoke(
+    db_session: AsyncSession,
+) -> None:
+    organization, owner = await create_user(
+        db_session,
+        "yandex",
+        "yandex@example.test",
+    )
+    principal = Principal(
+        user_id=owner.id,
+        organization_id=organization.id,
+        organization_slug=organization.slug,
+        email=owner.email,
+    )
+    repository = PostgresDashboardRepository(db_session)
+    cipher = CredentialCipher(SecretStr(Fernet.generate_key().decode("ascii")))
+    client = MockIMAPClient()
+    service = YandexMailService(
+        db_session,
+        repository,
+        client,
+        cipher,
+        {"INBOX"},
+    )
+    with pytest.raises(YandexIntegrationError):
+        await service.connect(principal, owner.email, "synthetic-app-password", "Sent")
+    integration = await service.connect(
+        principal,
+        owner.email,
+        "synthetic-app-password",
+        "INBOX",
+    )
+    credential = (
+        await db_session.execute(
+            select(IntegrationCredential).where(
+                IntegrationCredential.connection_id == integration.integration_id
+            )
+        )
+    ).scalar_one()
+    assert "synthetic-app-password" not in credential.ciphertext
+    assert owner.email not in credential.ciphertext
+    provider = MockAnalysisProvider()
+    workflow = AnalysisWorkflowService(
+        repository,
+        provider,
+        "mock-gigachat",
+        per_minute_limit=10,
+        daily_limit=20,
+    )
+    first = await service.sync(principal, workflow)
+    second = await service.sync(principal, workflow)
+    assert first.imported_messages == 2
+    assert first.analyzed_messages == 2
+    assert second.imported_messages == 0
+    assert second.analyzed_messages == 0
+    assert provider.calls == 2
+    dashboard = await repository.get_current_digest(organization.id, owner.id)
+    assert len(dashboard.attention_items) == 2
+    assert all(item.data_origin is DataOrigin.LIVE for item in dashboard.attention_items)
+
+    other_organization, other_owner = await create_user(
+        db_session,
+        "yandex-other",
+        "yandex-other@example.test",
+    )
+    assert (
+        await repository.get_source_by_id(
+            dashboard.attention_items[0].source_id,
+            other_organization.id,
+            other_owner.id,
+        )
+        is None
+    )
+    await service.revoke(principal)
+    credentials = (
+        await db_session.execute(select(func.count()).select_from(IntegrationCredential))
+    ).scalar_one()
+    assert credentials == 0
+    revoked = await repository.list_integrations(organization.id, owner.id)
+    yandex = next(item for item in revoked if item.integration_id == integration.integration_id)
+    assert yandex.status is IntegrationState.NOT_CONFIGURED

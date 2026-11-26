@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -73,6 +73,9 @@ class Connection(Base):
         String(16),
         default=DataOrigin.LIVE.value,
     )
+    provider_account_id: Mapped[str | None] = mapped_column(String(320))
+    folder: Mapped[str | None] = mapped_column(String(255))
+    sync_cursor: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -164,3 +167,41 @@ class AuthSession(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AIRequest(Base):
+    __tablename__ = "ai_requests"
+    __table_args__ = (
+        Index("ix_ai_requests_owner_created", "organization_id", "owner_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="CASCADE"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=lambda: datetime.now(UTC),
+    )
+
+
+class IntegrationCredential(Base):
+    __tablename__ = "integration_credentials"
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    connection_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("connections.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    ciphertext: Mapped[str] = mapped_column(String(4096))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )

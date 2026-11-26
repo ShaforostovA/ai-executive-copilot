@@ -54,7 +54,7 @@ npm run test:e2e --prefix frontend
 
 Playwright проверяет login → dashboard → source → logout и invalid credentials в desktop Chromium и mobile viewport. `E2E_DEMO_PASSWORD` должен соответствовать только локальному synthetic seed.
 
-GitLab CI содержит backend lint/unit, PostgreSQL 17 integration job, frontend lint/typecheck/unit/build. Playwright E2E выполняется локально против реального Docker backend и не заменяется моковым production auth.
+GitLab CI содержит backend lint/unit, PostgreSQL 17 integration job, frontend lint/typecheck/unit/build и изолированный `frontend:e2e` job с PostgreSQL, migrations, synthetic seed и Chromium. Playwright также выполняется локально против реального Docker backend и не заменяется моковым production auth.
 
 ## Границы
 

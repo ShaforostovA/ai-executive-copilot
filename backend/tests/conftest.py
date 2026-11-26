@@ -34,5 +34,5 @@ def app(settings: Settings) -> FastAPI:
 
 @pytest.fixture
 def client(app: FastAPI) -> Iterator[TestClient]:
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"Origin": "http://testserver"}) as test_client:
         yield test_client
