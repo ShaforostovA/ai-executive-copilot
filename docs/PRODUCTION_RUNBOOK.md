@@ -31,6 +31,21 @@ curl --fail "https://$DOMAIN/readyz"
 
 Проверить HTTPS certificate, login, dashboard, mobile viewport, DEMO/LIVE маркировку и отсутствие секретов в логах. LIVE GigaChat включается только `GIGACHAT_ENABLED=true` после отдельного разрешения и smoke с лимитом.
 
+## Initial production user
+
+Не используйте DEMO seed или общий пароль. После successful migrate создайте отдельную организацию и первого пользователя через `backend/scripts/create_initial_user.py`, передав secrets только через защищенную env-сессию:
+
+```bash
+docker compose --env-file .env.production -f infra/compose.prod.yml run --rm \
+  -e COPILOT_ADMIN_ORGANIZATION_SLUG \
+  -e COPILOT_ADMIN_ORGANIZATION_NAME \
+  -e COPILOT_ADMIN_EMAIL \
+  -e COPILOT_ADMIN_PASSWORD \
+  api python backend/scripts/create_initial_user.py
+```
+
+Скрипт требует уникальный email и пароль длиной не менее 12 символов, сохраняет только scrypt hash и не печатает пароль. Полная release-процедура и проверенный smoke находятся в `docs/RELEASE_READINESS.md`.
+
 ## Backup
 
 Перед миграциями и обновлениями:

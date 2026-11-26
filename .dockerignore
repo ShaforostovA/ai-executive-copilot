@@ -18,3 +18,4 @@ frontend/playwright-report
 *.db
 *.sqlite3
 backups
+.release-smoke

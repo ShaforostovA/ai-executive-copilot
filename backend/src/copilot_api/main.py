@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from copilot_api.core.config import Settings, get_settings
 from copilot_api.core.errors import register_exception_handlers
@@ -67,6 +68,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "X-Request-ID"],
     )
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=[ip.strip() for ip in settings.trusted_proxy_ips.split(",") if ip.strip()],
+    )
     register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)

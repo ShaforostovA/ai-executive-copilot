@@ -4,6 +4,7 @@ import imaplib
 import ssl
 from datetime import UTC, datetime
 from email.header import decode_header, make_header
+from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import Protocol
 
@@ -139,7 +140,7 @@ class YandexIMAPClient:
         )
 
 
-def _plain_text(message: email.message.Message) -> str:
+def _plain_text(message: Message) -> str:
     parts = message.walk() if message.is_multipart() else [message]
     for part in parts:
         if part.get_content_type() == "text/plain" and not part.get_filename():

@@ -47,6 +47,8 @@ docs/                       правила работы, решения, арх�
 
 ## Документация
 
+- [Release readiness и Ubuntu rollout](docs/RELEASE_READINESS.md)
+- [Live integration smoke после разрешения](docs/LIVE_INTEGRATION_SMOKE.md)
 - [Public MVP safeguards и Яндекс Почта](docs/PHASE5_PUBLIC_MVP.md)
 - [Production deploy, backup и rollback](docs/PRODUCTION_RUNBOOK.md)
 - [Текущий vertical slice: React и AI workflow](docs/PHASE4_REACT_AI_WORKFLOW.md)
