@@ -1,0 +1,12 @@
+# Memory-tuned staging profile for the diagnosed Ubuntu 4 GB VPS.
+services:
+  postgres:
+    mem_limit: 768m
+  migrate:
+    mem_limit: 384m
+  api:
+    mem_limit: 768m
+  frontend:
+    mem_limit: 192m
+  caddy:
+    mem_limit: 192m

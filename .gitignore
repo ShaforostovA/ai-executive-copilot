@@ -38,6 +38,9 @@ Thumbs.db
 # data and logs
 logs/
 .release-smoke/
+# sensitive VPS diagnostics
+vps-diagnostic.txt
+vps-diagnostic-*.txt
 *.log
 *.sqlite3
 *.db

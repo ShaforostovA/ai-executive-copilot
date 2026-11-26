@@ -7,6 +7,10 @@
 - Live GigaChat и реальная Яндекс Почта не вызывались.
 - Этот документ описывает будущий запуск только после разрешения владельца и получения безопасных diagnostic results.
 
+Полученная диагностика подтверждает Ubuntu 24.04 x86_64, 2 CPU, 3.4 GiB available RAM, 512 MiB swap и 54 GiB free disk. Docker/containerd отсутствуют, 80/443 свободны, UFW inactive, nftables пуст, конфликтующих служб нет. Подробности: `docs/VPS_ANALYSIS.md`.
+
+Базовый memory budget 3.25 GiB не оставляет достаточного запаса. Для этого VPS обязательно использовать `infra/compose.vps-4gb.yml` с общим лимитом 2.25 GiB; команды ниже уже содержат его. Не запускать базовый Compose без override.
+
 ## 1. Read-only диагностика
 
 Скопировать `infra/scripts/vps_diagnostic.sh` на VPS только после разрешения доступа и запустить:
@@ -20,7 +24,7 @@ bash infra/scripts/vps_diagnostic.sh
 Ожидаемые preflight условия:
 
 - x86_64 Ubuntu с Docker Engine support;
-- не менее 3.25 GiB доступной памяти для контейнеров и отдельный запас для ОС;
+- не менее 2.25 GiB для контейнеров плюс запас для ОС и временных пиков; для базового 3.25 GiB профиля — больше RAM;
 - не менее 10 GiB свободного места для images, PostgreSQL и backups;
 - порты 80/443 свободны или согласован существующий reverse proxy;
 - отсутствуют конфликтующие контейнеры/службы;
@@ -75,17 +79,17 @@ git checkout v0.1.0-rc1
 
 ```bash
 cd /opt/copilot-staging/app
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml config --quiet
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml build
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml up -d postgres
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml up -d migrate
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml ps
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml config --quiet
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml build
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml up -d postgres
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml up -d migrate
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml ps
 ```
 
 Проверить успешный exit one-shot migrate и схему БД. Затем создать отдельного admin через защищенную env-сессию, без пароля в command line:
 
 ```bash
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml run --rm \
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml run --rm \
   -e COPILOT_ADMIN_ORGANIZATION_SLUG \
   -e COPILOT_ADMIN_ORGANIZATION_NAME \
   -e COPILOT_ADMIN_EMAIL \
@@ -96,7 +100,7 @@ docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.
 После этого запустить API/frontend/Caddy:
 
 ```bash
-docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml up -d
+docker compose --env-file /etc/copilot-staging/.env.production -f infra/compose.prod.yml -f infra/compose.vps-4gb.yml up -d
 ```
 
 ## 5. DNS и HTTPS
