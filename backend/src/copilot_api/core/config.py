@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = Field(default=480, ge=5, le=10080)
     demo_seed_password: SecretStr | None = None
     allowed_origins: str = "http://127.0.0.1:5173,http://localhost:5173,http://testserver"
+    trusted_proxy_ips: str = "127.0.0.1,testclient"
     login_rate_limit_attempts: int = Field(default=5, ge=1, le=100)
     session_cleanup_interval_seconds: int = Field(default=300, ge=30, le=86400)
     credential_encryption_key: SecretStr | None = None

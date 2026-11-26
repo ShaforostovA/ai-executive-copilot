@@ -9,6 +9,7 @@ x-backend: &backend
     COPILOT_USE_DEMO_REPOSITORY: "false"
     COPILOT_SESSION_COOKIE_SECURE: "true"
     COPILOT_ALLOWED_ORIGINS: https://${DOMAIN}
+    COPILOT_TRUSTED_PROXY_IPS: 172.30.0.0/24
     COPILOT_GIGACHAT_ENABLED: ${GIGACHAT_ENABLED:-false}
     COPILOT_GIGACHAT_CREDENTIALS: ${GIGACHAT_CREDENTIALS:-}
     COPILOT_GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
@@ -96,3 +97,10 @@ volumes:
   pg_backups:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

@@ -8,6 +8,7 @@ COPY backend/requirements.lock /app/backend/requirements.lock
 COPY backend/src /app/backend/src
 COPY backend/alembic.ini /app/backend/alembic.ini
 COPY backend/alembic /app/backend/alembic
+COPY backend/scripts /app/backend/scripts
 RUN python -m pip install --no-cache-dir /app/backend -c /app/backend/requirements.lock
 
 RUN useradd --create-home --uid 10001 appuser
